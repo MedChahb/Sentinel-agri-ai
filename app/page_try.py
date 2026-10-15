@@ -129,6 +129,13 @@ def render() -> None:
         options=list(dates),
         value=(pd.Timestamp("2025-05-01"), pd.Timestamp("2025-06-30")),
         format_func=lambda d: d.strftime("%d %b %Y"),
+        help=(
+            "A test, not real clouds. Under real clouds there is no image, so nobody can check the "
+            "model. Here the satellite did see the field: the clear images of this period are kept "
+            "aside, the model fills the gap without them, and they are then used as the truth to "
+            "score its answer (red circles). In real use nothing is hidden: the model fills the "
+            "periods that were actually cloudy, as on the Field monitor page."
+        ),
     )
     c3, c4 = st.columns(2)
     mode_label = c3.radio(
