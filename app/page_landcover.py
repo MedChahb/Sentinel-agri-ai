@@ -7,22 +7,39 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 import tifffile
-from common import DATA_DIR, GROUP_COLOURS, SAMPLES_DIR, ApiError, call_api, hex_to_rgb, legend
+from common import (
+    DATA_DIR,
+    GROUP_COLOURS,
+    SAMPLES_DIR,
+    ApiError,
+    call_api,
+    data_version,
+    hex_to_rgb,
+    legend,
+)
 from PIL import Image
 
 CLOUDY = 0.3  # share of cloudy pixels above which a patch is greyed out
 SEASON_LABELS = {"winter": "Winter", "spring": "Spring", "summer": "Summer", "autumn": "Autumn"}
 
 
-@st.cache_data
 def landcover() -> tuple[dict, dict]:
+    return _landcover(data_version())
+
+
+@st.cache_data
+def _landcover(version: str) -> tuple[dict, dict]:
     meta = json.loads((DATA_DIR / "landcover" / "marne.json").read_text())
     arrays = dict(np.load(DATA_DIR / "landcover" / "marne.npz"))
     return meta, arrays
 
 
-@st.cache_data
 def overlay(season_index: int, opacity: float, source: str) -> Image.Image:
+    return _overlay(season_index, opacity, source, data_version())
+
+
+@st.cache_data
+def _overlay(season_index: int, opacity: float, source: str, version: str) -> Image.Image:
     """The season's true-colour image with each 640 m patch tinted by its class group."""
     meta, a = landcover()
     season = meta["seasons"][season_index]

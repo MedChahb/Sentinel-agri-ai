@@ -80,52 +80,90 @@ def call_api(path: str, **kwargs) -> dict:
 # --- Data ---------------------------------------------------------------------------------------
 
 
+def data_version() -> str:
+    """Changes whenever a data file changes, e.g. after a push: the caches below depend on it.
+
+    Streamlit Cloud loads new code without restarting, and a cached function whose code did not
+    change would keep serving data read before the update.
+    """
+    files = sorted(p for p in DATA_DIR.rglob("*") if p.is_file())
+    return "|".join(f"{p.name}:{p.stat().st_mtime_ns}:{p.stat().st_size}" for p in files)
+
+
 @st.cache_data
-def fields_meta() -> dict:
+def _fields_meta(version: str) -> dict:
     meta = json.loads((DATA_DIR / "fields_meta.json").read_text())
     meta["dates"] = pd.to_datetime(meta["dates"])
     return meta
 
 
 @st.cache_data
-def series() -> pd.DataFrame:
+def _series(version: str) -> pd.DataFrame:
     return pd.read_parquet(DATA_DIR / "series.parquet")
 
 
 @st.cache_data
-def plots() -> dict:
+def _plots(version: str) -> dict:
     return json.loads((DATA_DIR / "plots.geojson").read_text())
 
 
 @st.cache_data
-def plot_table() -> pd.DataFrame:
+def _plot_table(version: str) -> pd.DataFrame:
     return pd.DataFrame([f["properties"] for f in plots()["features"]]).set_index("parcel_id")
 
 
 @st.cache_data
-def clear_ndvi() -> pd.DataFrame:
+def _clear_ndvi(version: str) -> pd.DataFrame:
     return pd.read_parquet(DATA_DIR / "clear_ndvi.parquet")
 
 
 @st.cache_data
-def radar() -> pd.DataFrame:
+def _radar(version: str) -> pd.DataFrame:
     return pd.read_parquet(DATA_DIR / "radar.parquet")
 
 
 @st.cache_data
-def matrices() -> dict[str, np.ndarray]:
-    """(plots, steps) arrays of the series, in plot_table() order."""
+def _matrices(version: str) -> dict[str, np.ndarray]:
     s = series()
     ids = plot_table().index.to_numpy()
     n_steps = len(fields_meta()["dates"])
     out = {}
     columns = ["observed"] + [
-        f"{m}{s}" for m in ("after_season", "real_time") for s in ("", "_low", "_high")
+        f"{m}{suffix}" for m in ("after_season", "real_time") for suffix in ("", "_low", "_high")
     ]
     for column in columns:
         wide = s.pivot(index="parcel_id", columns="step", values=column).reindex(ids)
         out[column] = wide.to_numpy(dtype=float)[:, :n_steps]
     return out
+
+
+def fields_meta() -> dict:
+    return _fields_meta(data_version())
+
+
+def series() -> pd.DataFrame:
+    return _series(data_version())
+
+
+def plots() -> dict:
+    return _plots(data_version())
+
+
+def plot_table() -> pd.DataFrame:
+    return _plot_table(data_version())
+
+
+def clear_ndvi() -> pd.DataFrame:
+    return _clear_ndvi(data_version())
+
+
+def radar() -> pd.DataFrame:
+    return _radar(data_version())
+
+
+def matrices() -> dict[str, np.ndarray]:
+    """(plots, steps) arrays of the series, in plot_table() order."""
+    return _matrices(data_version())
 
 
 # --- Colours (colour-blind safe) ----------------------------------------------------------------
