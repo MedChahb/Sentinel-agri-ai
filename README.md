@@ -32,8 +32,8 @@ service would add.
 > **The AWS API will stop in April 2027,** when AWS's six-month Free plan ends: keeping it would mean
 > upgrading to a paid account, and this project stays 100 % free. From then on, the app's field monitor
 > and land-cover map keep working from their precomputed results; only the live features (the
-> gap-filling trial and the classification of tiles) stop. The API can be redeployed at any time by
-> following [docs/deploy_aws.md](docs/deploy_aws.md).
+> gap-filling trial and the classification of tiles) stop. The API can be redeployed at any time
+> ([api/README.md](api/README.md)).
 
 ## The web app
 
@@ -71,7 +71,6 @@ The research behind these results is in [notebooks/README.md](notebooks/README.m
 | [app/](app/) | The Streamlit web app and its precomputed data | [app/README.md](app/README.md) |
 | [src/sentinel_agri/](src/sentinel_agri/) | Shared code: data, models, satellite time series, gap-filling | |
 | [scripts/](scripts/) | Data download, model training and export, app data | |
-| [docs/deploy_aws.md](docs/deploy_aws.md) | Deploying the API on AWS Lambda or ECS, step by step | |
 | [tests/](tests/), [.github/workflows/](.github/workflows/) | Tests and CI: lint, tests, Docker build on each push | |
 
 **Data:** ESA Copernicus Sentinel-1 and Sentinel-2, via Microsoft Planetary Computer and the Copernicus

@@ -40,7 +40,27 @@ docker compose up -d --build api                  # -> http://localhost:8000/doc
 Without the models, the API still starts: `/health` shows which are missing, and their endpoint answers
 503. Tests (`pytest -q`) use small stand-in models, so they run anywhere, as in CI.
 
-## Deploy it
+## Deploy it on AWS Lambda
 
-Step by step, with costs and clean-up: [docs/deploy_aws.md](../docs/deploy_aws.md). AWS Lambda gives a
-public URL within its free allowance; ECS Express Mode is the always-on alternative, at about $2 a day.
+The Dockerfile includes the [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter),
+so the image runs on Lambda unchanged. With the AWS CLI signed in (`aws login`), an ECR repository, and
+a role that lets Lambda write logs (`AWSLambdaBasicExecutionRole`):
+
+```bash
+IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/sentinel-agri-api
+docker build --provenance=false --platform linux/amd64 -f api/Dockerfile -t $IMAGE:v1 .
+docker push $IMAGE:v1
+aws lambda create-function --function-name sentinel-agri-api --package-type Image \
+  --code ImageUri=$IMAGE:v1 --role <lambda-role-arn> --memory-size 3008 --timeout 60
+aws lambda create-function-url-config --function-name sentinel-agri-api --auth-type NONE
+aws lambda add-permission --function-name sentinel-agri-api --statement-id PublicUrl \
+  --action lambda:InvokeFunctionUrl --principal '*' --function-url-auth-type NONE
+aws lambda add-permission --function-name sentinel-agri-api --statement-id PublicUrlInvoke \
+  --action lambda:InvokeFunction --principal '*' --invoked-via-function-url
+```
+
+- `--provenance=false`: Lambda rejects the extra provenance record recent Docker versions add.
+- **3 GB of memory**: Lambda gives CPU in proportion to memory, and start-up is CPU work. A cold start
+  then takes about 7 s, safely under Lambda's 10 s start-up limit; at 2 GB it took about 9 s.
+- After a new version (`aws lambda update-function-code --image-uri $IMAGE:v2`), call `/health` once:
+  the first start, while Lambda caches the image, is much slower and can time out.
