@@ -1,0 +1,8 @@
+# Web app only: it calls the API for predictions, so it needs no model libraries.
+streamlit==1.64.0
+plotly==7.1.0
+pandas==3.0.6
+pyarrow==25.0.1
+numpy==2.4.6
+requests==2.34.2
+tifffile==2026.3.3  # reads uploaded GeoTIFF tiles for their preview

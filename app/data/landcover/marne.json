@@ -1,0 +1,53 @@
+{
+ "region": "Marne: Reims and the Montagne de Reims",
+ "seasons": [
+  "winter",
+  "spring",
+  "summer",
+  "autumn"
+ ],
+ "dates": [
+  "2025-02-23",
+  "2025-04-29",
+  "2025-07-02",
+  "2025-09-28"
+ ],
+ "classes": [
+  "AnnualCrop",
+  "Forest",
+  "HerbaceousVegetation",
+  "Highway",
+  "Industrial",
+  "Pasture",
+  "PermanentCrop",
+  "Residential",
+  "River",
+  "SeaLake"
+ ],
+ "class_to_group": {
+  "AnnualCrop": "Crop",
+  "PermanentCrop": "Crop",
+  "Pasture": "Grass",
+  "HerbaceousVegetation": "Grass",
+  "Forest": "Forest",
+  "River": "Water",
+  "SeaLake": "Water",
+  "Residential": "Built-up",
+  "Industrial": "Built-up",
+  "Highway": "Built-up"
+ },
+ "groups": [
+  "Crop",
+  "Grass",
+  "Forest",
+  "Water",
+  "Built-up"
+ ],
+ "bbox_lonlat": [
+  3.86607,
+  49.11246,
+  4.19564,
+  49.32833
+ ],
+ "patch_m": 640
+}

@@ -1,4 +1,4 @@
-"""Train the gap-filling models served by the API (part 3), on every plot of every season.
+"""Train the gap-filling models served by the API (part 3), on every plot of the chosen seasons.
 
 One XGBoost model per crop, per mode (after the season / real time) and with or without radar:
 8 models, with the inputs chosen in notebook 5 (`SERVED_FEATURES`), saved as JSON in
@@ -6,9 +6,13 @@ models/gapfill/ with a metadata file. 15 % of the plots of each season are held 
 training and to report a validation error. That error comes from the training seasons, so it
 favours models that use the date; notebook 5 (section 13) compares the models on a new season.
 
-Usage: python scripts/train_gapfill.py   (after scripts/extract_part2.py for every season)
+Usage: python scripts/train_gapfill.py --seasons 2023-24   (after scripts/extract_part2.py)
+
+The deployed models are trained on 2023-24 only, so that the web app's demo season, 2024-25, is one
+they have never seen: the real-life setup of notebook 5. In production, train on every past season.
 """
 
+import argparse
 import json
 import logging
 import warnings
@@ -57,13 +61,16 @@ def season_tables(season: str, seed: int = 0):
 def main() -> None:
     warnings.filterwarnings("ignore", message=".*no geotransform.*")
     logging.getLogger("rasterio").setLevel(logging.ERROR)
-    tables = [season_tables(season) for season in SEASONS]
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--seasons", nargs="+", choices=list(SEASONS), default=list(SEASONS))
+    seasons = parser.parse_args().seasons
+    tables = [season_tables(season) for season in seasons]
     fit = pd.concat([t[0] for t in tables], ignore_index=True)
     stop = pd.concat([t[1] for t in tables], ignore_index=True)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     metadata = {
-        "trained_on": list(SEASONS),
+        "trained_on": seasons,
         "plots": int(sum(t[2] for t in tables)),
         "date": date.today().isoformat(),
         "models": {},

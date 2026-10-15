@@ -97,6 +97,28 @@ def build_grid(
 # --- Cleaning -----------------------------------------------------------------------------------
 
 
+FROST_MONTHS = (11, 12, 1, 2, 3)
+FROST_DROP_DB = 2.0
+
+
+def frozen_steps(grid: Grid, past_steps: int = 4) -> np.ndarray:
+    """Steps where the radar of the whole area drops at once in winter: frost, not the crops.
+
+    Frozen plants reflect radar very differently, so on a frosty day every field's VH falls by a few
+    dB and a model reading radar sees crops vanish. A crop change never hits every field on the
+    same day in winter (harvest does in summer, hence the months). Each step is compared with the
+    median of the previous ones only, so the check also works in real time. Needs many fields:
+    with a single plot, a real change and frost cannot be told apart.
+    """
+    vh = grid.s1[:, :, 1]
+    flags = np.zeros(vh.shape[1], dtype=bool)
+    for t in range(1, vh.shape[1]):
+        reference = np.nanmedian(vh[:, max(0, t - past_steps) : t], axis=1)
+        drop = np.nanmedian(reference - vh[:, t])
+        flags[t] = drop > FROST_DROP_DB and grid.dates[t].month in FROST_MONTHS
+    return flags
+
+
 def despike(ndvi: np.ndarray, threshold: float = 0.15, max_steps: int = 2):
     """Remove isolated drops that are most likely clouds or haze the cloud mask missed.
 
