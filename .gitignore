@@ -1,0 +1,31 @@
+# Data: downloaded or generated, never committed. Scripts in scripts/ recreate it.
+data/*
+!data/.gitkeep
+
+# Model weights: too large for git. The API image copies them from models/.
+models/*
+!models/.gitkeep
+
+# Experiment tracking (if MLflow is run outside Docker)
+mlruns/
+mlartifacts/
+lightning_logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets
+.env

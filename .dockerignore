@@ -1,0 +1,13 @@
+# Keep the build context small: data alone is several GB.
+data/
+notebooks/
+reports/
+mlruns/
+# Training files: the API only needs the exported models (.onnx, .json, gapfill/).
+models/checkpoints/
+models/*.pt
+.git/
+.github/
+**/__pycache__/
+**/.ipynb_checkpoints/
+*.egg-info/

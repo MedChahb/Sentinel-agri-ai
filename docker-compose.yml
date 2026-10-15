@@ -1,0 +1,28 @@
+# Local services.
+#   docker compose up -d mlflow   experiment tracking, used from part 1 on  -> http://localhost:5000
+#   docker compose up -d --build api   API: /classify and /gapfill (part 3)  -> http://localhost:8000/docs
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.17.0
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    profiles: ["api"]
+
+volumes:
+  mlflow-data:

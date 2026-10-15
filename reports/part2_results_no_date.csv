@@ -1,0 +1,5 @@
+,Linear interpolation,"XGBoost, no radar",XGBoost
+"Same season, artificial gaps",0.059,0.0452,0.0369
+"Last season, artificial gaps",0.059,0.0582,0.0581
+"Last season, real clouds",0.0933,0.099,0.0777
+"Last season, real time",0.1027,0.1402,0.0819

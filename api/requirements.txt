@@ -1,0 +1,10 @@
+# Inference only: kept small for the Docker image. No PyTorch: the classifier runs as ONNX.
+numpy==2.4.6
+pandas==3.0.6
+scipy==1.17.1
+rasterio==1.4.4
+onnxruntime==1.31.0
+xgboost-cpu==3.2.0  # 6 MB instead of 130 MB for the GPU build
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
