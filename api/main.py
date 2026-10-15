@@ -102,6 +102,7 @@ class Prediction(BaseModel):
     label: str
     probability: float
     probabilities: dict[str, float]
+    warning: str | None = None  # set when a Level-2A tile was classified on request
 
 
 def read_tile(data: bytes) -> np.ndarray:
@@ -122,27 +123,39 @@ MIN_B10_STD = 0.1  # Level-2A has no B10, so a sender has to fill it, usually wi
 MIN_B01_B02_RATIO = 0.85  # haze keeps B01 above 0.93 x B02 in Level-1C; 69 % of Level-2A is below
 
 
-def check_level_1c(tile: np.ndarray) -> None:
-    """Reject tiles that look like Level-2A instead of answering with a confident wrong class."""
+LEVEL_2A_REFUSED = (
+    "The tile looks like Level-2A (atmospherically corrected) data. This model only supports "
+    "Level-1C, top-of-atmosphere reflectance. Add ?allow_level2a=true to classify it anyway."
+)
+LEVEL_2A_WARNING = (
+    "This tile looks like Level-2A, but the model was trained on Level-1C only, which is not "
+    "enough to generalise to Level-2A: on real Level-2A tiles it was right 44.6 % of the time "
+    "(96.6 % on Level-1C), often with high confidence. Treat this answer as unreliable."
+)
+
+
+def looks_like_level_2a(tile: np.ndarray) -> bool:
     b01, b02, b10 = (tile[INPUT_BANDS.index(b)] for b in ("B01", "B02", "B10"))
     ratio = float(np.median(b01)) / max(float(np.median(b02)), 1.0)
-    if b10.std() < MIN_B10_STD or ratio < MIN_B01_B02_RATIO:
-        raise HTTPException(
-            422,
-            "The tile looks like Level-2A (atmospherically corrected) data. "
-            "This model only supports Level-1C, top-of-atmosphere reflectance.",
-        )
+    return bool(b10.std() < MIN_B10_STD or ratio < MIN_B01_B02_RATIO)
 
 
 @app.post("/classify")
-async def classify(file: Annotated[UploadFile, File()]) -> Prediction:
+async def classify(file: Annotated[UploadFile, File()], allow_level2a: bool = False) -> Prediction:
+    """Land-cover class of a Level-1C tile.
+
+    Level-2A tiles are refused by default, so that a program does not silently receive confident
+    wrong answers. With `allow_level2a=true`, they are classified and the answer carries a warning.
+    """
     classifier = state.get("classifier")
     if classifier is None:
         raise HTTPException(
             503, "No classifier loaded. Export it with scripts/export_classifier.py."
         )
     tile = read_tile(await file.read())
-    check_level_1c(tile)
+    level_2a = looks_like_level_2a(tile)
+    if level_2a and not allow_level2a:
+        raise HTTPException(422, LEVEL_2A_REFUSED)
     logits = classifier["session"].run(None, {"tiles": tile[None]})[0][0]
     probs = np.exp(logits - logits.max())
     probs /= probs.sum()
@@ -151,6 +164,7 @@ async def classify(file: Annotated[UploadFile, File()]) -> Prediction:
         label=classifier["classes"][best],
         probability=float(probs[best]),
         probabilities={c: float(p) for c, p in zip(classifier["classes"], probs, strict=True)},
+        warning=LEVEL_2A_WARNING if level_2a else None,
     )
 
 

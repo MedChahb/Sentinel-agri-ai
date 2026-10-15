@@ -80,7 +80,8 @@ def pct(p: float) -> str:
 @st.cache_data(show_spinner=False)
 def classify_tile(name: str, data: bytes) -> dict:
     """One API call per distinct tile: picking the same sample again reuses the answer."""
-    return call_api("/classify", files={"file": (name, data)})
+    # allow_level2a: Level-2A tiles are classified too, with a warning, to show how the model fails
+    return call_api("/classify?allow_level2a=true", files={"file": (name, data)})
 
 
 def classify_section() -> None:
@@ -89,8 +90,8 @@ def classify_section() -> None:
         "The model takes a 64 × 64 Sentinel-2 **Level-1C** tile with all 13 bands, as a GeoTIFF "
         "(EuroSAT band order). The samples are tiles it never saw during training, with their true "
         "class, picked to show its whole range: sure and right, unsure, and **confidently wrong**. "
-        "A Level-2A tile is refused on purpose: the model learned from Level-1C and gets half of "
-        "Level-2A tiles wrong, with confidence."
+        "A Level-2A tile is classified with a warning: the model learned from Level-1C only and "
+        "gets half of Level-2A tiles wrong, with confidence."
     )
     samples = json.loads((SAMPLES_DIR / "samples.json").read_text())
     c1, c2 = st.columns([1, 1])
@@ -125,6 +126,8 @@ def classify_section() -> None:
             else:
                 right.error(str(err))
             return
+    if answer.get("warning"):
+        right.warning(f"**Level-2A tile.** {answer['warning']}")
     probs = dict(sorted(answer["probabilities"].items(), key=lambda kv: kv[1]))
     meta, _ = landcover()
     groups = meta["class_to_group"]

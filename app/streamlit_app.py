@@ -47,7 +47,8 @@ requests to the API, exactly as any other program could: its interactive documen
 **Measured accuracy** (details in the notebooks)
 
 - Land cover: 98.98 % on EuroSAT's test set, 96.6 % on new 2025 Level-1C images around Reims,
-  44.6 % on Level-2A images, which the API therefore refuses.
+  44.6 % on Level-2A images. The API refuses Level-2A by default; this app sends them anyway and
+  shows a warning, so that you can see the model fail on them.
 - Gap-filling, models trained on 2023–24 and applied to 2024–25 under real cloud patterns: 17 %
   lower error than a straight line across the gap, and in real time, 20 % lower than keeping the
   last clear value. Radar is what makes the difference: without it, no model reliably beats those

@@ -159,8 +159,17 @@ def test_classify_rejects_level_2a(client, b10_constant, b01_factor):
     assert "Level-2A" in response.json()["detail"]
 
 
+def test_classify_level_2a_on_request_comes_with_a_warning(client):
+    tile = level_2a_like(b10_constant=True, b01_factor=1.2)
+    response = client.post("/classify?allow_level2a=true", files={"file": ("tile.tif", tile)})
+    assert response.status_code == 200
+    assert "Level-1C only" in response.json()["warning"]
+
+
 def test_classify_accepts_level_1c_like_tile(client):
-    assert classify(client, level_2a_like(False, 1.2)).status_code == 200
+    response = classify(client, level_2a_like(False, 1.2))
+    assert response.status_code == 200
+    assert response.json()["warning"] is None
 
 
 # --- /gapfill -----------------------------------------------------------------------------------
