@@ -1,0 +1,26 @@
+{
+ "reims_2025-07-02_confident_right.tif": {
+  "title": "Reims, 2025-07-02, Level-1C",
+  "truth": "Forest"
+ },
+ "reims_2025-07-02_level2a.tif": {
+  "title": "Reims, 2025-07-02, Level-2A",
+  "truth": "Forest"
+ },
+ "reims_2025-02-23_unsure_right.tif": {
+  "title": "Reims, 2025-02-23, Level-1C",
+  "truth": "AnnualCrop"
+ },
+ "reims_2025-09-28_unsure_wrong.tif": {
+  "title": "Reims, 2025-09-28, Level-1C",
+  "truth": "Forest"
+ },
+ "reims_2025-04-29_confident_wrong.tif": {
+  "title": "Reims, 2025-04-29, Level-1C",
+  "truth": "Forest"
+ },
+ "eurosat_test_industrial.tif": {
+  "title": "EuroSAT test set",
+  "truth": "Industrial"
+ }
+}

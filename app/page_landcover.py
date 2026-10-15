@@ -72,6 +72,11 @@ def rgb_preview(data: bytes) -> np.ndarray | None:
     return (np.clip((rgb - 600) / 1800, 0, 1) ** 0.8 * 255).astype(np.uint8)
 
 
+def pct(p: float) -> str:
+    """A probability as a percentage; two decimals above 99 %, so that 99.95 % never reads 100 %."""
+    return f"{p:.2%}" if 0.99 < p < 1 else f"{p:.1%}"
+
+
 @st.cache_data(show_spinner=False)
 def classify_tile(name: str, data: bytes) -> dict:
     """One API call per distinct tile: picking the same sample again reuses the answer."""
@@ -82,26 +87,22 @@ def classify_section() -> None:
     st.subheader("Classify a tile")
     st.markdown(
         "The model takes a 64 × 64 Sentinel-2 **Level-1C** tile with all 13 bands, as a GeoTIFF "
-        "(EuroSAT band order). Pick a sample or upload your own. A Level-2A tile is refused on "
-        "purpose: the model was trained on Level-1C and gets half of Level-2A tiles wrong."
+        "(EuroSAT band order). The samples are tiles it never saw during training, with their true "
+        "class, picked to show its whole range: sure and right, unsure, and **confidently wrong**. "
+        "A Level-2A tile is refused on purpose: the model learned from Level-1C and gets half of "
+        "Level-2A tiles wrong, with confidence."
     )
-    samples = sorted(SAMPLES_DIR.glob("*.tif"))
-    names = {p.name: p for p in samples}
-    labels = {
-        n: (
-            "Reims, 29 Apr 2025, Level-1C"
-            if "level1c" in n
-            else "Reims, 29 Apr 2025, Level-2A (refused)"
-            if "level2a" in n
-            else "EuroSAT: " + n.removeprefix("eurosat_").removesuffix(".tif")
-        )
-        for n in names
-    }
+    samples = json.loads((SAMPLES_DIR / "samples.json").read_text())
     c1, c2 = st.columns([1, 1])
-    choice = c1.selectbox("Sample tile", list(names), format_func=labels.get)
+    choice = c1.selectbox(
+        "Sample tile",
+        list(samples),
+        format_func=lambda n: f"{samples[n]['title']} · true class: {samples[n]['truth']}",
+    )
     upload = c2.file_uploader("…or upload your own (.tif)", type=["tif", "tiff"])
-    data = upload.getvalue() if upload else names[choice].read_bytes()
+    data = upload.getvalue() if upload else (SAMPLES_DIR / choice).read_bytes()
     name = upload.name if upload else choice
+    truth = None if upload else samples[choice]["truth"]
 
     left, right = st.columns([1, 2])
     preview = rgb_preview(data)
@@ -125,14 +126,26 @@ def classify_section() -> None:
                 right.error(str(err))
             return
     probs = dict(sorted(answer["probabilities"].items(), key=lambda kv: kv[1]))
-    right.success(f"**{answer['label']}**, probability {answer['probability']:.1%}")
+    meta, _ = landcover()
+    groups = meta["class_to_group"]
+    verdict = ""
+    if truth is not None:
+        right_group = groups[answer["label"]] == groups[truth]
+        verdict = f" True class: **{truth}**, so the model is " + (
+            "**right**." if right_group else "**wrong**."
+        )
+    message = f"**{answer['label']}**, probability {pct(answer['probability'])}.{verdict}"
+    if truth is not None and not right_group:
+        right.error(message)
+    else:
+        right.success(message)
     fig = go.Figure(
         go.Bar(
             x=list(probs.values()),
             y=list(probs),
             orientation="h",
             marker_color="#0072B2",
-            text=[f"{v:.1%}" for v in probs.values()],
+            text=[pct(v) for v in probs.values()],
             textposition="outside",
         )
     )
@@ -143,6 +156,10 @@ def classify_section() -> None:
         margin={"l": 10, "r": 10, "t": 10, "b": 10},
     )
     right.plotly_chart(fig)
+    right.caption(
+        "A high probability is not a guarantee: on real 2025 tiles around Reims, the model is "
+        "right on 92 % of them, yet some of its mistakes come with more than 99 % confidence."
+    )
 
 
 def render() -> None:

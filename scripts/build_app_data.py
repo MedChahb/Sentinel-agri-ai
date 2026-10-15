@@ -35,6 +35,7 @@ from sentinel_agri.parcels import select_parcels
 from sentinel_agri.realworld import (
     CACHE_DIR,
     EUROSAT_TO_GROUP,
+    LABEL_TO_GROUP,
     PATCH,
     REGIONS,
     SCL_BAD,
@@ -251,15 +252,48 @@ def build_landcover() -> None:
 
 
 def build_samples() -> None:
-    SAMPLES_DIR.mkdir(exist_ok=True)
+    """Six tiles the model never saw, chosen to show its whole range, not only its successes.
+
+    Five come from notebook 3's real 2025 images around Reims, whose true class is known from the
+    RPG and ESA WorldCover; one from EuroSAT's test split. Their predictions (notebook 3) cover:
+    confident and right, unsure and right, unsure and wrong, confidently wrong, and a Level-2A tile.
+    """
+    if SAMPLES_DIR.exists():
+        shutil.rmtree(SAMPLES_DIR)
+    SAMPLES_DIR.mkdir()
+    preds = pd.read_parquet(CACHE_DIR / "predictions.parquet")
+    reims = preds[(preds["region"] == "marne") & (preds["product"] == "L1C")].copy()
+    reims["right"] = reims["label"].map(LABEL_TO_GROUP) == reims["pred"].map(EUROSAT_TO_GROUP)
+
+    def pick(season, label, right, prob_order):
+        rows = reims[(reims.season == season) & (reims.label == label) & (reims.right == right)]
+        return rows.sort_values("prob", ascending=prob_order == "low").iloc[0]
+
+    chosen = {
+        "confident_right": pick("summer", "Forest", True, "high"),
+        "unsure_right": pick("winter", "AnnualCrop", True, "low"),
+        "unsure_wrong": pick("autumn", "Forest", False, "low"),
+        "confident_wrong": pick("spring", "Forest", False, "high"),
+    }
+    samples = {}
+    for key, row in chosen.items():
+        scene = np.load(next(CACHE_DIR.glob(f"marne_{row.season}_*.npz")))
+        date = next(CACHE_DIR.glob(f"marne_{row.season}_*.npz")).stem.split("_")[2]
+        name = f"reims_{date}_{key}.tif"
+        (SAMPLES_DIR / name).write_bytes(to_geotiff(scene["l1c"][int(row.idx)]))
+        samples[name] = {"title": f"Reims, {date}, Level-1C", "truth": row.label}
+        if key == "confident_right":  # the same tile as Level-2A, which the API refuses
+            name_2a = f"reims_{date}_level2a.tif"
+            (SAMPLES_DIR / name_2a).write_bytes(to_geotiff(scene["l2a"][int(row.idx)]))
+            samples[name_2a] = {"title": f"Reims, {date}, Level-2A", "truth": row.label}
+    # A EuroSAT test tile on which the model hesitates (51 %): the test split was never trained on.
     tif_dir = next(EUROSAT_DIR.rglob("tif"))
-    for name in EUROSAT_CLASSES:
-        shutil.copy(tif_dir / name / f"{name}_1.tif", SAMPLES_DIR / f"eurosat_{name}.tif")
-    # One patch of the Reims area on 29 April 2025, as Level-1C (accepted) and Level-2A (refused).
-    scene = np.load(next(CACHE_DIR.glob("marne_spring_*.npz")))
-    (SAMPLES_DIR / "reims_2025-04-29_level1c.tif").write_bytes(to_geotiff(scene["l1c"][0]))
-    (SAMPLES_DIR / "reims_2025-04-29_level2a.tif").write_bytes(to_geotiff(scene["l2a"][0]))
-    print(f"samples: {len(list(SAMPLES_DIR.glob('*.tif')))} tiles")
+    shutil.copy(
+        tif_dir / "Industrial" / "Industrial_2073.tif", SAMPLES_DIR / "eurosat_test_industrial.tif"
+    )
+    samples["eurosat_test_industrial.tif"] = {"title": "EuroSAT test set", "truth": "Industrial"}
+    (SAMPLES_DIR / "samples.json").write_text(json.dumps(samples, indent=1))
+    print(f"samples: {len(samples)} tiles")
 
 
 def main() -> None:
