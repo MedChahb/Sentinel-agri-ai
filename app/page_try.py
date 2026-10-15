@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from common import ApiError, api_url, call_api, clear_ndvi, plot_table, radar
+from common import ApiError, api_url, call_api, clear_ndvi, plot_table, plots, radar
 
 DEFAULT_FIELD = 469  # a wheat field whose May-June result is the median of a sample of fields
 
@@ -40,6 +40,64 @@ def build_request(field: int, start, end, mode: str, use_radar: bool):
     return request, visible, obs[hidden]
 
 
+def _rings(geometry: dict):
+    """Outer rings of a Polygon or MultiPolygon, as (lons, lats)."""
+    polygons = geometry["coordinates"]
+    if geometry["type"] == "Polygon":
+        polygons = [polygons]
+    for polygon in polygons:
+        ring = np.array(polygon[0])
+        yield ring[:, 0], ring[:, 1]
+
+
+def field_location(field: int) -> None:
+    """The chosen field outlined on a satellite view, with its neighbours."""
+    lons, lats, own = [], [], None
+    for feature in plots()["features"]:
+        for x, y in _rings(feature["geometry"]):
+            if feature["properties"]["parcel_id"] == field:
+                own = (x, y)
+            else:
+                lons += [*x, None]
+                lats += [*y, None]
+    x, y = own
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scattermap(
+            lon=lons,
+            lat=lats,
+            mode="lines",
+            hoverinfo="skip",
+            line={"color": "rgba(255,255,255,0.6)", "width": 1},
+        )
+    )
+    fig.add_trace(
+        go.Scattermap(
+            lon=x,
+            lat=y,
+            mode="lines",
+            fill="toself",
+            hoverinfo="skip",
+            fillcolor="rgba(230,159,0,0.25)",
+            line={"color": "#E69F00", "width": 3},
+        )
+    )
+    span = max(np.ptp(x), np.ptp(y) * 1.5)
+    zoom = float(np.clip(np.log2(360 / max(span, 1e-4)) - 1.6, 11, 17))
+    fig.update_layout(
+        map={
+            "style": "satellite",
+            "center": {"lon": float(x.mean()), "lat": float(y.mean())},
+            "zoom": zoom,
+        },
+        height=260,
+        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        showlegend=False,
+    )
+    st.plotly_chart(fig, config={"displayModeBar": False})
+    st.caption("The field (orange) on a satellite view, with the neighbouring fields of the study.")
+
+
 def render() -> None:
     table = plot_table()
     st.title("Try the gap-filling")
@@ -50,15 +108,23 @@ def render() -> None:
         "scored against."
     )
 
-    c1, c2 = st.columns([1, 2])
+    c1, c2 = st.columns([1, 1.6])
     field = c1.selectbox(
         "Field",
         table.index,
         index=int(table.index.get_loc(DEFAULT_FIELD)),
         format_func=lambda p: f"Plot {p} ({table.loc[p, 'crop']})",
     )
+    n_clear = int((clear_ndvi()["parcel_id"] == field).sum())
+    c1.markdown(
+        f"**{table.loc[field, 'crop']}**, {table.loc[field, 'area_ha']} ha, east of Reims.  \n"
+        f"Season 2024–25: **{n_clear}** clear Sentinel-2 images and "
+        f"**{table.loc[field, 'radar_passes']}** Sentinel-1 radar passes."
+    )
+    with c2:
+        field_location(int(field))
     dates = pd.date_range("2024-10-01", "2025-08-31", freq="D")
-    start, end = c2.select_slider(
+    start, end = st.select_slider(
         "Period hidden by clouds",
         options=list(dates),
         value=(pd.Timestamp("2025-05-01"), pd.Timestamp("2025-06-30")),
