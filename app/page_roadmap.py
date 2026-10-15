@@ -34,9 +34,11 @@ It was left out on purpose: **the rule of this project was that everything stays
 - **This season's fields are not public yet.** The French register of farm plots (RPG) of a season
   is published the following year. A real service gets its fields from its users instead.
 
-The demo therefore keeps only what costs nothing or almost nothing: this app on Streamlit Community
-Cloud (free), results precomputed once, and the models on AWS Lambda, within its permanent free
-allowance (after the six-month Free plan, only storing the image costs a few cents a month).
+The demo therefore keeps only what is free: this app on Streamlit Community Cloud, results
+precomputed once, and the models on AWS Lambda under AWS's six-month Free plan. **The model API will
+stop in April 2027**, when that plan ends, since keeping it would mean a paid account. The field
+monitor and the land-cover map will keep working from their stored results; only the live features
+(the gap-filling trial and the classification of tiles) will stop.
 
 **A free route exists, with limits:** scheduled GitHub Actions runs (free for public repositories,
 up to six hours each) could run the extraction, and a free hosted PostgreSQL tier could store the

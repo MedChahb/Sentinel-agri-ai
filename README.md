@@ -25,9 +25,15 @@ A live service would need a pipeline that runs every few days and a database tha
 Both are paid on AWS once its six-month Free plan ends, and the extraction job is too long for the
 free Lambda. Besides, this season's register of farm plots is only published the following year.
 
-What runs for free: the app on Streamlit Community Cloud, the models on AWS Lambda within its permanent
-free allowance (after the Free plan, storing the image costs a few cents a month), and the tests on
-GitHub Actions. The app's page *From demo to real service* details what a real service would add.
+What runs for free: the app on Streamlit Community Cloud, the models on AWS Lambda under AWS's Free
+plan, and the tests on GitHub Actions. The app's page *From demo to real service* details what a real
+service would add.
+
+> **The AWS API will stop in April 2027,** when AWS's six-month Free plan ends: keeping it would mean
+> upgrading to a paid account, and this project stays 100 % free. From then on, the app's field monitor
+> and land-cover map keep working from their precomputed results; only the live features (the
+> gap-filling trial and the classification of tiles) stop. The API can be redeployed at any time by
+> following [docs/deploy_aws.md](docs/deploy_aws.md).
 
 ## The web app
 

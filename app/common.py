@@ -74,7 +74,11 @@ def call_api(path: str, **kwargs) -> dict:
         if not response.ok:
             raise ApiError(f"The model API answered HTTP {response.status_code}.")
         return response.json()
-    raise ApiError(f"{last_error} Please try again in a few seconds.")
+    raise ApiError(
+        f"{last_error} Please try again in a few seconds. If it keeps failing, the model API "
+        "may be offline for good: its free AWS hosting ends in April 2027 (see From demo to "
+        "real service). The field monitor and the land-cover map keep working."
+    )
 
 
 # --- Data ---------------------------------------------------------------------------------------
