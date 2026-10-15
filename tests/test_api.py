@@ -55,13 +55,21 @@ def gapfill_dir(tmp_path_factory):
             x = rng.normal(size=(200, len(names)))
             data = xgb.DMatrix(x, label=rng.uniform(0.1, 0.9, 200), feature_names=names)
             model = xgb.train({"max_depth": 3}, data, num_boost_round=5)
+            interval = xgb.train(
+                {"max_depth": 3, "objective": "reg:quantileerror", "quantile_alpha": [0.1, 0.9]},
+                data,
+                num_boost_round=5,
+            )
             name = f"{mode}_{crop}_{radar}".replace(" ", "_")
             model.save_model(directory / f"{name}.json")
+            interval.save_model(directory / f"{name}_interval.json")
             metadata["models"][name] = {
                 "crop": crop,
                 "mode": mode,
                 "radar": radar,
                 "features": names,
+                "interval_model": f"{name}_interval.json",
+                "interval_widen": 0.01,
             }
     (directory / "metadata.json").write_text(json.dumps(metadata))
     return directory
@@ -208,6 +216,10 @@ def test_gapfill_after_season_fills_between_observations(client):
     assert all(v is not None for v in body["ndvi"][first : last + 1])  # every gap in between
     assert all(v is None for v in body["ndvi"][last + 1 :])  # nothing after the last observation
     assert body["radar_used"] is True
+    for value, low, high in zip(body["ndvi"], body["ndvi_low"], body["ndvi_high"], strict=True):
+        assert (value is None) == (low is None) == (high is None)
+        if value is not None:
+            assert low <= value <= high  # the estimate always lies within its range
 
 
 def test_gapfill_real_time_extends_after_the_last_observation(client):

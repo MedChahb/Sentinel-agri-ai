@@ -33,6 +33,7 @@ def state_on(step: int) -> pd.DataFrame:
     estimate = m["real_time"][:, step]
     df = table[["crop", "area_ha"]].copy()
     df["ndvi"] = estimate
+    df["low"], df["high"] = m["real_time_low"][:, step], m["real_time_high"][:, step]
     df["median"] = df.groupby("crop")["ndvi"].transform("median")
     df["anomaly"] = df["ndvi"] - df["median"]
     df["age"] = np.where(last >= 0, (step - last) * STEP_DAYS, np.nan)
@@ -138,6 +139,23 @@ def field_chart(parcel_id: int, step: int, show_hindsight: bool) -> None:
                 name="End-of-season reconstruction (hindsight)",
             )
         )
+    low, high = m["real_time_low"][row], m["real_time_high"][row]
+    fig.add_trace(
+        go.Scatter(
+            x=dates[past], y=high[past], line={"width": 0}, showlegend=False, hoverinfo="skip"
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=dates[past],
+            y=low[past],
+            fill="tonexty",
+            fillcolor="rgba(213,94,0,0.18)",
+            line={"width": 0},
+            name="Likely range (80 %)",
+            hoverinfo="skip",
+        )
+    )
     fig.add_trace(
         go.Scatter(
             x=dates[past],
@@ -294,10 +312,13 @@ def render() -> None:
 
     info = df.loc[field]
     age = "no clear image yet" if np.isnan(info["age"]) else f"{info['age']:.0f} days old"
+    likely = ""
+    if not info["clear_today"] and not np.isnan(info["low"]):
+        likely = f" (likely between {info['low']:.2f} and {info['high']:.2f})"
     st.markdown(
         f"On **{day:%d %B %Y}**, the last clear image of this field was **{age}**. "
-        f"Estimated NDVI: **{info['ndvi']:.2f}**, against **{info['median']:.2f}** for the median "
-        f"{info['crop'].lower()} field."
+        f"Estimated NDVI: **{info['ndvi']:.2f}**{likely}, against **{info['median']:.2f}** for "
+        f"the median {info['crop'].lower()} field."
     )
 
     d1, d2 = st.columns(2)

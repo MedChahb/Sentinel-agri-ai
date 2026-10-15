@@ -177,13 +177,17 @@ def render() -> None:
         {
             "date": pd.to_datetime(answer["dates"]),
             "ndvi": answer["ndvi"],
+            "low": answer.get("ndvi_low", answer["ndvi"]),
+            "high": answer.get("ndvi_high", answer["ndvi"]),
             "observed": answer["observed"],
         }
-    ).astype({"ndvi": float})
+    ).astype({"ndvi": float, "low": float, "high": float})
     step_of = lambda d: (d - result["date"][0]).days // 5  # noqa: E731
     truth = hidden.assign(step=hidden["date"].map(step_of))
     truth = truth[truth["step"] < len(result)]
     model_values = result["ndvi"].to_numpy()[truth["step"].to_numpy()]
+    low_values = result["low"].to_numpy()[truth["step"].to_numpy()]
+    high_values = result["high"].to_numpy()[truth["step"].to_numpy()]
     x_visible = visible["date"].map(pd.Timestamp.toordinal).to_numpy()
     line = np.interp(truth["date"].map(pd.Timestamp.toordinal), x_visible, visible["ndvi"])
     if mode == "real_time":  # the real-time baseline: keep the last clear value
@@ -208,6 +212,26 @@ def render() -> None:
                 line={"color": "#999", "dash": "dash"},
             )
         )
+    fig.add_trace(
+        go.Scatter(
+            x=result["date"],
+            y=result["high"],
+            line={"width": 0},
+            showlegend=False,
+            hoverinfo="skip",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=result["date"],
+            y=result["low"],
+            fill="tonexty",
+            fillcolor="rgba(213,94,0,0.18)",
+            line={"width": 0},
+            name="Likely range (80 %)",
+            hoverinfo="skip",
+        )
+    )
     fig.add_trace(
         go.Scatter(
             x=result["date"],
@@ -248,10 +272,19 @@ def render() -> None:
         ok = ~np.isnan(model_values)
         model_mae = np.abs(model_values[ok] - truth["ndvi"].to_numpy()[ok]).mean()
         line_mae = np.abs(line[ok] - truth["ndvi"].to_numpy()[ok]).mean()
-        k1, k2, k3 = st.columns(3)
+        inside = (truth["ndvi"].to_numpy() >= low_values) & (
+            truth["ndvi"].to_numpy() <= high_values
+        )
+        k1, k2, k3, k4 = st.columns(4)
         k1.metric("Model error (mean, NDVI)", f"{model_mae:.3f}")
         k2.metric(f"{baseline_name}: error", f"{line_mae:.3f}")
-        k3.metric("Radar used", "yes" if answer["radar_used"] else "no")
+        k3.metric(
+            "Hidden images inside the range",
+            f"{inside[ok].sum()} of {ok.sum()}",
+            help="The range is calibrated to contain the truth about 80 % of the time: over the "
+            "unseen 2024-25 season, it did 75 to 79 % of the time.",
+        )
+        k4.metric("Radar used", "yes" if answer["radar_used"] else "no")
         st.caption(
             "Errors on the hidden clear images, for this one field. Over all fields, the model "
             "is 17 % better than the straight line under real clouds, but not everywhere: see "

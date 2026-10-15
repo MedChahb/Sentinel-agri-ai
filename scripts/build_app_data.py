@@ -25,12 +25,18 @@ import warnings
 import numpy as np
 import onnxruntime as ort
 import pandas as pd
-import xgboost as xgb
 from odc.stac import load
 from PIL import Image
 
 from sentinel_agri.config import EUROSAT_CLASSES, EUROSAT_DIR, MODELS_DIR, ROOT
-from sentinel_agri.gapfill import MIN_CLEAR_SHARE, build_grid, despike, frozen_steps, tabular
+from sentinel_agri.gapfill import (
+    MIN_CLEAR_SHARE,
+    build_grid,
+    despike,
+    frozen_steps,
+    load_served,
+    tabular,
+)
 from sentinel_agri.parcels import select_parcels
 from sentinel_agri.realworld import (
     CACHE_DIR,
@@ -65,11 +71,10 @@ def predict(models, grid, rows, hidden, mode, crop, radar_rows) -> pd.DataFrame:
         subset = rows[np.isin(rows, radar_rows) == use_radar]
         if not len(subset):
             continue
-        model, features = models[(crop, mode, use_radar)]
         table = tabular(grid, subset, hidden, require_next=mode == "after_season")
         if len(table):
-            values = np.clip(model.inplace_predict(table[features]), -1, 1)
-            out.append(table[["parcel_id", "step"]].assign(value=values))
+            value, low, high = models[(crop, mode, use_radar)].predict(table)
+            out.append(table[["parcel_id", "step"]].assign(value=value, low=low, high=high))
     return pd.concat(out, ignore_index=True)
 
 
@@ -80,13 +85,7 @@ def build_fields() -> None:
     grid.ndvi, _ = despike(grid.ndvi)
 
     metadata = json.loads((MODELS_DIR / "gapfill" / "metadata.json").read_text())
-    models = {
-        (m["crop"], m["mode"], m["radar"]): (
-            xgb.Booster(model_file=MODELS_DIR / "gapfill" / f"{name}.json"),
-            m["features"],
-        )
-        for name, m in metadata["models"].items()
-    }
+    models = load_served(MODELS_DIR / "gapfill")
     passes = s1.groupby("parcel_id").size().reindex(grid.parcel_ids, fill_value=0).to_numpy()
     radar_rows = np.flatnonzero(passes >= MIN_RADAR_PASSES)
     hidden = ~grid.observed  # every step without a clear observation
@@ -111,16 +110,18 @@ def build_fields() -> None:
             parts.append(predict(models, grid, rows, hidden, mode, crop, radar_rows))
             if mode == "real_time":
                 fallback.append(predict(models, grid, rows, hidden, mode, crop, radar_rows=[]))
-        predicted = pd.concat(parts).set_index(["parcel_id", "step"])["value"]
+        predicted = pd.concat(parts).set_index(["parcel_id", "step"])
         if fallback:
-            no_radar = pd.concat(fallback).set_index(["parcel_id", "step"])["value"]
+            no_radar = pd.concat(fallback).set_index(["parcel_id", "step"])
             on_frost = no_radar[
                 np.isin(no_radar.index.get_level_values("step"), np.flatnonzero(frozen))
             ]
             predicted.loc[on_frost.index] = on_frost
-        filled = predicted.reindex(index).to_numpy()
-        series[mode] = np.where(series["observed"].notna(), series["observed"], filled)
-        series[mode] = series[mode].astype(np.float32)
+        predicted = predicted.reindex(index)
+        seen = series["observed"].notna().to_numpy()
+        for column, suffix in [("value", ""), ("low", "_low"), ("high", "_high")]:
+            values = np.where(seen, series["observed"], predicted[column].to_numpy())
+            series[mode + suffix] = values.astype(np.float32)  # an observation has no range
     series.to_parquet(DATA_DIR / "series.parquet", index=False)
 
     # What a client sends to the API: the clear observations and the radar passes.

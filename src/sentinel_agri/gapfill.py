@@ -358,3 +358,48 @@ def paired_difference(errors: pd.DataFrame, a: str, b: str, n: int = 1000, seed:
     diff = errors.assign(d=errors[a] - errors[b])
     low, high = bootstrap_mae(diff, "d", n, seed)
     return {"difference": diff["d"].mean(), "low": low, "high": high}
+
+
+# --- Served models (API and web app) ------------------------------------------------------------
+
+
+@dataclass
+class ServedModel:
+    """One served gap-filling model: the estimate, and optionally its calibrated range."""
+
+    booster: object  # xgboost.Booster
+    features: list[str]
+    interval: object | None = None  # xgboost.Booster of the 10th and 90th percentiles
+    widen: float = 0.0  # conformal margin added on both sides of the range
+
+    def predict(self, table: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Estimate, low and high values, clipped to the NDVI range. No range: low = high = NaN."""
+        x = table[self.features]
+        value = np.clip(self.booster.inplace_predict(x), -1, 1)
+        if self.interval is None:
+            return value, np.full(len(x), np.nan), np.full(len(x), np.nan)
+        quantiles = np.asarray(self.interval.inplace_predict(x)).reshape(len(x), 2)
+        low = np.clip(np.minimum(quantiles[:, 0] - self.widen, value), -1, 1)
+        high = np.clip(np.maximum(quantiles[:, 1] + self.widen, value), -1, 1)
+        return value, low, high
+
+
+def load_served(directory) -> dict[tuple[str, str, bool], ServedModel]:
+    """The models saved by scripts/train_gapfill.py, keyed by (crop, mode, radar)."""
+    import json
+    from pathlib import Path
+
+    import xgboost as xgb  # imported here: the rest of this module does not need it
+
+    directory = Path(directory)
+    metadata = json.loads((directory / "metadata.json").read_text())
+    models = {}
+    for name, info in metadata["models"].items():
+        interval = info.get("interval_model")
+        models[(info["crop"], info["mode"], info["radar"])] = ServedModel(
+            booster=xgb.Booster(model_file=directory / f"{name}.json"),
+            features=info["features"],
+            interval=xgb.Booster(model_file=directory / interval) if interval else None,
+            widen=info.get("interval_widen", 0.0),
+        )
+    return models

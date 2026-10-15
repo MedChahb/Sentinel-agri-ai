@@ -119,7 +119,10 @@ def matrices() -> dict[str, np.ndarray]:
     ids = plot_table().index.to_numpy()
     n_steps = len(fields_meta()["dates"])
     out = {}
-    for column in ("observed", "after_season", "real_time"):
+    columns = ["observed"] + [
+        f"{m}{s}" for m in ("after_season", "real_time") for s in ("", "_low", "_high")
+    ]
+    for column in columns:
         wide = s.pivot(index="parcel_id", columns="step", values=column).reindex(ids)
         out[column] = wide.to_numpy(dtype=float)[:, :n_steps]
     return out

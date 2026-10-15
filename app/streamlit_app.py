@@ -7,6 +7,7 @@ predictions: the AWS Lambda one by default, or API_URL from the environment or t
 
 import page_fields
 import page_landcover
+import page_roadmap
 import page_try
 import streamlit as st
 from common import REPO_URL, api_url, wake_api
@@ -82,6 +83,12 @@ pages = [
     st.Page(page_try.render, title="Try the gap-filling", icon=":material/cloud:", url_path="try"),
     st.Page(
         page_landcover.render, title="Land-cover map", icon=":material/map:", url_path="landcover"
+    ),
+    st.Page(
+        page_roadmap.render,
+        title="From demo to real service",
+        icon=":material/rocket_launch:",
+        url_path="roadmap",
     ),
     st.Page(about, title="About", icon=":material/info:", url_path="about"),
 ]

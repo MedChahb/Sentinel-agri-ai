@@ -18,12 +18,11 @@ import numpy as np
 import onnxruntime as ort
 import pandas as pd
 import rasterio
-import xgboost as xgb
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from rasterio.io import MemoryFile
 
-from sentinel_agri.gapfill import build_grid, tabular
+from sentinel_agri.gapfill import build_grid, load_served, tabular
 
 CLASSIFIER_PATH = Path(os.environ.get("MODEL_PATH", "models/eurosat_resnet18.onnx"))
 GAPFILL_DIR = Path(os.environ.get("GAPFILL_DIR", "models/gapfill"))
@@ -62,11 +61,7 @@ def load_gapfill(directory: Path) -> dict | None:
     if not (directory / "metadata.json").exists():
         return None
     metadata = json.loads((directory / "metadata.json").read_text())
-    models = {}
-    for name, info in metadata["models"].items():
-        model = xgb.Booster(model_file=directory / f"{name}.json")  # XGBRegressor needs sklearn
-        models[(info["crop"], info["mode"], info["radar"])] = (model, info["features"])
-    return {"models": models, "trained_on": metadata["trained_on"]}
+    return {"models": load_served(directory), "trained_on": metadata["trained_on"]}
 
 
 @asynccontextmanager
@@ -199,6 +194,10 @@ class GapfillRequest(BaseModel):
 class GapfillResponse(BaseModel):
     dates: list[date]
     ndvi: list[float | None]
+    ndvi_low: list[float | None] = Field(
+        description="Calibrated range: the truth falls between low and high about 80 % of the time"
+    )
+    ndvi_high: list[float | None]
     observed: list[bool]
     radar_used: bool
     mode: str
@@ -235,15 +234,23 @@ def gapfill(request: GapfillRequest) -> GapfillResponse:
     grid = build_grid(ndvi, radar, parcels, start=str(start), end=str(end))
 
     use_radar = len(request.radar) >= MIN_RADAR_PASSES
-    model, features = service["models"][(request.crop, request.mode, use_radar)]
+    model = service["models"][(request.crop, request.mode, use_radar)]
     missing = ~grid.observed
     table = tabular(grid, np.array([0]), missing, require_next=request.mode == "after_season")
     filled = np.where(grid.observed[0], grid.ndvi[0], np.nan)
+    low, high = filled.copy(), filled.copy()  # an observed value has no range
     if len(table):
-        filled[table["step"].to_numpy()] = np.clip(model.inplace_predict(table[features]), -1, 1)
+        steps = table["step"].to_numpy()
+        filled[steps], low[steps], high[steps] = model.predict(table)
+
+    def as_list(values):
+        return [None if np.isnan(v) else round(float(v), 4) for v in values]
+
     return GapfillResponse(
         dates=[d.date() for d in grid.dates],
-        ndvi=[None if np.isnan(v) else round(float(v), 4) for v in filled],
+        ndvi=as_list(filled),
+        ndvi_low=as_list(low),
+        ndvi_high=as_list(high),
         observed=grid.observed[0].tolist(),
         radar_used=use_radar,
         mode=request.mode,
